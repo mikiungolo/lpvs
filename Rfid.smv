@@ -1,0 +1,216 @@
+-- Questa applicazione modella un sistema Rfid, in particolare 
+-- modella e testa gli algoritmi di anticollisione per i lettori 
+
+-- spiegazione progetto e modello
+
+MODULE main 
+
+VAR 
+    reader: Reader(tag1, tag2);
+    tag1: Tag(reader, 900, 10);
+    tag2: Tag(reader, 9010, 100);
+    --tag3: Tag(reader, 9011, 100);
+    --tag4: Tag(reader, 9100, 100);
+    --tag5: Tag(reader, 9101, 100);
+    --tag6: Tag(reader, 91110, 1000);
+    --tag7: Tag(reader, 911110, 10000);
+    --tag8: Tag(reader, 911111, 10000); 
+
+-- PROPERTY 
+
+-- Correttezza anticollisione
+-- si verifica se l'algoritmo di anticollisisone è funzionante o meno. 
+-- una volta che si innesca una collisione viene verifcato che tutti i cammini
+-- presenti portino comunque alla lettura di tutti i tag. 
+--LTLSPEC 
+--G (reader.state = collision -> F (reader.state = accept))
+
+-- Deadlock
+-- si verifica che il sistema non vada in deadlock e quindi non 
+-- rimanga bloccato in uno stato di collisione.  
+--LTLSPEC 
+--G (reader.state = collision)
+
+
+LTLSPEC 
+F (reader.state = end); 
+
+MODULE Reader(tag1, tag2) 
+
+VAR 
+state : {send, wait, idle, collision, accept, end};
+tag_count : 0..8; -- counter of unknow tag 
+address : array 0..6 of -1..1; -- Assuming max lenght address
+
+DEFINE
+    node_count := tag1.present + tag2.present;
+    N := 6;
+
+ASSIGN
+
+    init(state) := send;
+    next(state) := 
+    case
+        tag_count = 0 : end;  
+        state = send : wait; 
+        state = wait & node_count = 1 : accept; 
+        state = wait & node_count > 1 : collision;
+        state = wait & node_count = 0 : idle;
+        state = idle : send; 
+        state = collision : send;
+        state = accept : send;
+        TRUE : state; 
+    esac;
+
+    init(tag_count) := 2;
+    next(tag_count) := 
+    case
+        state = accept : tag_count - 1;
+        TRUE : tag_count;   
+    esac;    
+
+    init(address[0]) := -1;
+    next(address[0]) := 
+    case 
+        state = collision : 0;
+        (state = accept | state = idle) & address[0] = 0 : 1; 
+        (state = accept | state = idle) & address[0] = 1 : address[1]; 
+        TRUE : address[0]; 
+    esac; 
+
+    init(address[1]) := -1;
+    next(address[1]) := 
+    case 
+        state = collision & address[0] != -1 : address[0];
+        (state = accept | state = idle) & address[0] = 1 : address[2]; 
+        TRUE : address[1];
+    esac; 
+
+    init(address[2]) := -1;
+    next(address[2]) := 
+    case 
+        state = collision & address[0] != -1 : address[1];
+        (state = accept | state = idle) & address[0] = 1 : address[3]; 
+        TRUE : address[2];
+    esac; 
+
+    init(address[3]) := -1;
+    next(address[3]) := 
+    case 
+        state = collision & address[0] != -1 : address[2];
+        (state = accept | state = idle) & address[0] = 1 : address[4]; 
+        TRUE : address[3];
+    esac; 
+
+    init(address[4]) := -1;
+    next(address[4]) := 
+    case 
+        state = collision & address[0] != -1 : address[3];
+        (state = accept | state = idle) & address[0] = 1 : address[5]; 
+        TRUE : address[4];
+    esac; 
+
+    init(address[5]) := -1;
+    next(address[5]) := 
+    case 
+        state = collision & address[0] != -1 : address[4];
+        (state = accept | state = idle) & address[0] = 1 : address[6]; 
+        TRUE : address[5];
+    esac; 
+
+    init(address[6]) := -1;
+    next(address[6]) := 
+    case 
+        state = collision & address[0] != -1 : address[5];
+        TRUE : address[6];
+    esac; 
+
+MODULE Tag(reader, id, ind10)
+
+VAR 
+state: {wait, transmitting, identified};
+address : array 0..6 of -1..1; -- created dinamically 
+present: 0..1; 
+i10: 1..1000000; 
+
+DEFINE 
+N := 6;
+new_bit := ((id / ind10) mod 2); 
+arrays_equal := address[0]=reader.address[0] & address[1]=reader.address[1] & address[2]=reader.address[2] 
+    & address[3]=reader.address[3] & address[4]=reader.address[4] & address[5]=reader.address[5] & address[6]=reader.address[6];
+
+ASSIGN
+init(state) := wait;
+    
+    next(state) := 
+    case
+        reader.state = send & state = wait & arrays_equal : transmitting;
+        reader.state = accept & state = transmitting : identified;
+        reader.state != accept & state = transmitting : wait;
+        TRUE : state; 
+    esac;
+
+    init(i10) := ind10; -- Special i, multiple 10, that find a correct bit in "id"
+    next(i10) := 
+    case
+        reader.state = collision & state = transmitting & address[0] = -1 : i10 / 10;  
+        reader.state = collision & state = transmitting : i10 / 10;  
+        TRUE : i10;
+    esac;   
+
+    init(present) := 0;
+    next(present) := 
+    case
+        reader.state = send & state = wait & arrays_equal : 1; 
+        reader.state != send : 0; 
+        TRUE : present;
+    esac;   
+
+    init(address[0]) := -1; 
+    next(address[0]) := 
+    case 
+        reader.state = collision & state = transmitting : new_bit; 
+        TRUE : address[0];
+    esac; 
+
+    init(address[1]) := -1; 
+    next(address[1]) := 
+    case 
+        reader.state = collision & state = transmitting & address[0] != -1 : address[0]; 
+        TRUE : address[1];
+    esac; 
+
+    init(address[2]) := -1; 
+    next(address[2]) := 
+    case 
+        reader.state = collision & state = transmitting & address[0] != -1 : address[1]; 
+        TRUE : address[2];
+    esac; 
+
+    init(address[3]) := -1; 
+    next(address[3]) := 
+    case 
+        reader.state = collision & state = transmitting & address[0] != -1 : address[2]; 
+        TRUE : address[3];
+    esac; 
+
+    init(address[4]) := -1; 
+    next(address[4]) := 
+    case 
+        reader.state = collision & state = transmitting & address[0] != -1 : address[3]; 
+        TRUE : address[4];
+    esac; 
+
+    init(address[5]) := -1; 
+    next(address[5]) := 
+    case 
+        reader.state = collision & state = transmitting & address[0] != -1 : address[4]; 
+        TRUE : address[5];
+    esac; 
+
+    init(address[6]) := -1; 
+    next(address[6]) := 
+    case 
+        reader.state = collision & state = transmitting & address[0] != -1 : address[5]; 
+        TRUE : address[6];
+    esac; 
