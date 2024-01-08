@@ -65,7 +65,7 @@ ASSIGN
     init(tag_count) := 2;
     next(tag_count) := 
     case
-        state = accept : tag_count - 1;
+        state = accept & tag_count > 0 : tag_count - 1;
         TRUE : tag_count;   
     esac;    
 
@@ -128,14 +128,14 @@ ASSIGN
 MODULE Tag(reader, id, ind10)
 
 VAR 
-state: {wait, transmitting, identified};
+state: {wait, transmitting, check_single, identified};
 address : array 0..6 of -1..1; -- created dinamically 
 present: 0..1; 
 i10: 1..1000000; 
 
 DEFINE 
 N := 6;
-new_bit := ((id / ind10) mod 2); 
+new_bit := ((id / i10) mod 2); 
 arrays_equal := address[0]=reader.address[0] & address[1]=reader.address[1] & address[2]=reader.address[2] 
     & address[3]=reader.address[3] & address[4]=reader.address[4] & address[5]=reader.address[5] & address[6]=reader.address[6];
 
@@ -145,16 +145,17 @@ init(state) := wait;
     next(state) := 
     case
         reader.state = send & state = wait & arrays_equal : transmitting;
-        reader.state = accept & state = transmitting : identified;
-        reader.state != accept & state = transmitting : wait;
+        state = transmitting : check_single;
+        reader.state = accept & state = check_single : identified;
+        reader.state != accept & state = check_single : wait;
         TRUE : state; 
     esac;
 
     init(i10) := ind10; -- Special i, multiple 10, that find a correct bit in "id"
     next(i10) := 
     case
-        reader.state = collision & state = transmitting & address[0] = -1 : i10 / 10;  
-        reader.state = collision & state = transmitting : i10 / 10;  
+        i10 < 10 : 1; 
+        i10 > 1 & reader.state = collision : i10 / 10;  
         TRUE : i10;
     esac;   
 
@@ -169,48 +170,48 @@ init(state) := wait;
     init(address[0]) := -1; 
     next(address[0]) := 
     case 
-        reader.state = collision & state = transmitting : new_bit; 
+        reader.state = collision : new_bit; 
         TRUE : address[0];
     esac; 
 
     init(address[1]) := -1; 
     next(address[1]) := 
     case 
-        reader.state = collision & state = transmitting & address[0] != -1 : address[0]; 
+        reader.state = collision & address[0] != -1 : address[0]; 
         TRUE : address[1];
     esac; 
 
     init(address[2]) := -1; 
     next(address[2]) := 
     case 
-        reader.state = collision & state = transmitting & address[0] != -1 : address[1]; 
+        reader.state = collision & address[0] != -1 : address[1]; 
         TRUE : address[2];
     esac; 
 
     init(address[3]) := -1; 
     next(address[3]) := 
     case 
-        reader.state = collision & state = transmitting & address[0] != -1 : address[2]; 
+        reader.state = collision & address[0] != -1 : address[2]; 
         TRUE : address[3];
     esac; 
 
     init(address[4]) := -1; 
     next(address[4]) := 
     case 
-        reader.state = collision & state = transmitting & address[0] != -1 : address[3]; 
+        reader.state = collision & address[0] != -1 : address[3]; 
         TRUE : address[4];
     esac; 
 
     init(address[5]) := -1; 
     next(address[5]) := 
     case 
-        reader.state = collision & state = transmitting & address[0] != -1 : address[4]; 
+        reader.state = collision & address[0] != -1 : address[4]; 
         TRUE : address[5];
     esac; 
 
     init(address[6]) := -1; 
     next(address[6]) := 
     case 
-        reader.state = collision & state = transmitting & address[0] != -1 : address[5]; 
+        reader.state = collision & address[0] != -1 : address[5]; 
         TRUE : address[6];
     esac; 
