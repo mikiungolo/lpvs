@@ -154,7 +154,6 @@ init(state) := wait;
     init(i10) := ind10; -- Special i, multiple 10, that find a correct bit in "id"
     next(i10) := 
     case
-        i10 < 10 : 1; 
         i10 > 1 & reader.state = collision : i10 / 10;  
         TRUE : i10;
     esac;   
