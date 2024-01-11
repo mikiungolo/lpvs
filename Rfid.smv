@@ -1,145 +1,157 @@
 -- Questa applicazione modella un sistema Rfid, in particolare 
--- modella e testa gli algoritmi di anticollisione per i lettori 
+-- modella e verifica l'algoritmo base di anticollisione per i lettori.
+-- il sistema è rappresentato da un lettore ed un numero N di tag disponibili
+-- alla comunicazione con il lettore.  
 
--- spiegazione progetto e modello
+-- Il lettore invia delle sonde a determinati tag nel suo raggio d'azione, 
+-- i quali potranno rispondere solo tramite tale richiesta. 
+-- Nel livello di astrazione scelto la sonda inviata dal Reader è rappresentata da 
+-- una sequenza di bit che dinamicamente cambia fino al termine dell'algoritmo, 
+-- ovvero quando tutti i tag saranno stati individuati. 
+-- Un tag sarà individuato se e solo se sarà l'unico ad aver ricevuto la sonda da parte del lettore, 
+-- ovvero quando il suo id è uguale a quello presente nella sonda.  
 
 MODULE main 
 
 VAR 
-    reader: Reader(tag1, tag2, tag3);--, tag4, tag5, tag6, tag7, tag8);
-    tag1: Tag(reader, 0, 0, -1, -1, -1);
-    tag2: Tag(reader, 0, 1, 0, -1, -1);
-    --tag3: Tag(reader, 0, 0, 1, -1, -1);
-    -- tag4: Tag(reader, 1, 0, 0, -1, -1);
-    -- tag5: Tag(reader, 1, 0, 1, -1, -1);
-    -- tag6: Tag(reader, 1, 1, 1, 0, -1);
-    -- tag7: Tag(reader, 1, 1, 1, 1, 0);
-    tag3: Tag(reader, 1, 1, 1, 1, 1); 
+    reader: Reader(tag1, tag2, tag3, tag4);--, tag5, tag6, tag7, tag8);
+    tag1:   Tag(reader, 0, 0, -1, -1, -1);
+    tag2:   Tag(reader, 0, 1, 0, -1, -1);
+    tag3:   Tag(reader, 1, 1, 1, 1, 1); 
+    tag4:   Tag(reader, 0, 0, 1, -1, -1);
+    -- tag5: Tag(reader, 1, 0, 0, -1, -1);
+    -- tag6: Tag(reader, 1, 0, 1, -1, -1);
+    -- tag7: Tag(reader, 1, 1, 1, 0, -1);
+    -- tag8: Tag(reader, 1, 1, 1, 1, 0);
 
 -- PROPERTY 
 
--- prima o poi si raggiunge il termine dell'esecuzione e i tag saranno
--- stati tutti individuati 
-CTLSPEC 
-EF(reader.state = end & reader.tag_count = 0)
-
--- se solo un tag riceve la sonda allora il reader sarà in accettazione 
--- nel prossimo turno
-CTLSPEC 
-AG((tag1.present + tag2.present + tag3.present --+ tag4.present + tag5.present + tag6.present + tag7.present + tag8.present 
-        = 1) -> EX(reader.state = accept))
-
--- se si raggiunge il termine dell'esecuzione si ha che tutti i tag 
--- sono stati identificati dal lettore
-CTLSPEC 
-AG((reader.state = end) -> (tag1.state = identified & tag2.state = identified & tag3.state = identified)) --& tag4.state = identified & tag5.state = identified
-                            --& tag6.state = identified & tag7.state = identified & tag8.state = identified))
-
--- quando un tag viene identificato non compie più operazioni, 
--- non cambiando più il suo stato 
-CTLSPEC
-EF(AG(tag1.state = identified & tag2.state = identified & tag3.state = identified)) --& tag4.state = identified & tag5.state = identified
-                            --& tag6.state = identified & tag7.state = identified & tag8.state = identified))
-
--- quando sono stati identificati tutti i tag il reader  non  
--- compie più operazioni, non cambiando più il suo stato 
-CTLSPEC
-AG((reader.tag_count = 0) -> EX(EG(reader.state = end)))
-
--- quando il reader ha smesso di lavorare tutti i tag sono stati 
--- identificati 
-CTLSPEC
-AG((reader.state = end) -> (tag1.state = identified & tag2.state = identified & tag3.state = identified)) --& tag4.state = identified & tag5.state = identified
-                            --& tag6.state = identified & tag7.state = identified & tag8.state = identified))
+-- RAGGIUNGIBILITA'
 
 -- dopo che un tag è entrato in trasmissione prima o poi sarà identificato
 -- verifica su tag 1 
 CTLSPEC 
-AG((tag1.state = transmitting) -> EF(tag1.state = identified))
+    EF((tag1.state = transmitting) -> (tag1.state = identified))
 
 -- verifica su ultimo tag
 CTLSPEC 
-AG((tag3.state = transmitting) -> EF(tag3.state = identified))
+    EF((tag3.state = transmitting) -> (tag3.state = identified))
 
-MODULE Reader(tag1, tag2, tag3)--, tag4, tag5, tag6, tag7, tag8) 
+-- prima o poi si raggiunge il termine dell'esecuzione e i tag saranno
+-- stati tutti individuati 
+CTLSPEC 
+    EF(reader.state = end & reader.tag_count = 0)
+
+-- LIVENESS 
+
+-- se tutti i tag sono stati individuati lungo il cammino allora 
+-- l'algoritmo termina e tale condizione non varierà in nessun modo. 
+CTLSPEC 
+    AG((tag1.state = identified & tag2.state = identified & tag3.state = identified & tag4.state = identified -- & tag5.state = identified
+                            --& tag6.state = identified & tag7.state = identified & tag8.state = identified
+                            -> AF((reader.state = end))))
+
+-- LIVENESS (condizionata al turno successivo X)
+
+-- quando sono stati identificati tutti i tag il reader  non  
+-- compie più operazioni, non cambiando più il suo stato 
+CTLSPEC
+    AG((reader.tag_count = 0) -> AX(reader.state = end))
+
+-- se solo un tag riceve la sonda allora il reader sarà in accettazione 
+-- nel prossimo turno
+CTLSPEC 
+    AG((tag1.present + tag2.present + tag3.present + tag4.present --+ tag5.present + tag6.present + tag7.present + tag8.present 
+            = 1) -> AX(reader.state = single))
+
+-- FAIRNESS DEBOLE 
+-- se un tag in un dato punto è in stato di trasmissione allora 
+-- il reader continuerà ad inviare le sonde fornendo un flusso continuo d'esecuzione
+LTLSPEC
+    F(G tag1.state = transmitting) -> G(F reader.state = send)
+
+-- Nel seguente livello d'astrazione il Reader conosce il numero di tag presenti nel suo raggio d'azione.
+-- Tale conoscenza verrà sfruttata per la verifica delle collisioni e per tenere il conto dei tag non identificati.  
+MODULE Reader(tag1, tag2, tag3, tag4)--, tag5, tag6, tag7, tag8) 
 
 VAR 
-state : {send, wait, idle, collision, accept, end};
-tag_count : 0..3; -- counter of unknow tag 
-address : array 0..4 of -1..1; -- Assuming max lenght address
+    state     : {send, wait, idle, collision, single, end}; -- stato dele reader 
+    tag_count : 0..4; -- contatore tag 
+    address   : array 0..4 of -1..1; -- indirizzo dinamico che simula il contenuto di una sonda
 
 DEFINE
-    node_count := tag1.present + tag2.present + tag3.present;-- + tag4.present + tag5.present + tag6.present + tag7.present + tag8.present;
+    -- conta il numero di tag presenti in un nodo dell'albero
+    node_count := tag1.present + tag2.present + tag3.present + tag4.present; -- + tag5.present + tag6.present + tag7.present + tag8.present;
 
 ASSIGN
 
     init(state) := send;
     next(state) := 
     case
-        tag_count = 0 : end;  
-        state = send : wait; 
-        state = wait & node_count = 1 : accept; 
+        tag_count = 0                 : end;  
+        state = send                  : wait; 
+        state = wait & node_count = 1 : single; 
         state = wait & node_count > 1 : collision;
         state = wait & node_count = 0 : idle;
-        state = idle : send; 
-        state = collision : send;
-        state = accept : send;
-        TRUE : state; 
+        state = idle                  : send; 
+        state = collision             : send;
+        state = single                : send;
+        TRUE                          : state; 
     esac;
 
-    init(tag_count) := 3;
+    init(tag_count) := 4;
     next(tag_count) := 
     case
-        state = accept & tag_count > 0 : tag_count - 1;
-        TRUE : tag_count;   
+        state = single & tag_count > 0 : tag_count - 1;
+        TRUE                           : tag_count;   
     esac;    
 
     init(address[0]) := -1;
     next(address[0]) := 
     case 
-        state = collision : 0;
-        (state = accept | state = idle) & address[0] = 0 : 1; 
-        (state = accept | state = idle) & address[0] = 1 : address[1]; 
-        TRUE : address[0]; 
+        state = collision                                : 0;
+        (state = single | state = idle) & address[0] = 0 : 1; 
+        (state = single | state = idle) & address[0] = 1 : address[1]; 
+        TRUE                                             : address[0]; 
     esac; 
 
     init(address[1]) := -1;
     next(address[1]) := 
     case 
-        state = collision & address[0] != -1 : address[0];
-        (state = accept | state = idle) & address[0] = 1 : address[2]; 
-        TRUE : address[1];
+        state = collision & address[0] != -1             : address[0];
+        (state = single | state = idle) & address[0] = 1 : address[2]; 
+        TRUE                                             : address[1];
     esac; 
 
     init(address[2]) := -1;
     next(address[2]) := 
     case 
-        state = collision & address[0] != -1 : address[1];
-        (state = accept | state = idle) & address[0] = 1 : address[3]; 
-        TRUE : address[2];
+        state = collision & address[0] != -1             : address[1];
+        (state = single | state = idle) & address[0] = 1 : address[3]; 
+        TRUE                                             : address[2];
     esac; 
 
     init(address[3]) := -1;
     next(address[3]) := 
     case 
-        state = collision & address[0] != -1 : address[2];
-        (state = accept | state = idle) & address[0] = 1 : address[4]; 
-        TRUE : address[3];
+        state = collision & address[0] != -1             : address[2];
+        (state = single | state = idle) & address[0] = 1 : address[4]; 
+        TRUE                                             : address[3];
     esac; 
 
     init(address[4]) := -1;
     next(address[4]) := 
     case 
-        state = collision & address[0] != -1 : address[3];
-        --(state = accept | state = idle) & address[0] = 1 : address[5]; 
-        TRUE : address[4];
+        state = collision & address[0] != -1             : address[3];
+        --(state = single | state = idle) & address[0] = 1 : address[5];
+        TRUE                                 : address[4];
     esac; 
 
     -- init(address[5]) := -1;
     -- next(address[5]) := 
     -- case 
     --     state = collision & address[0] != -1 : address[4];
-    --     (state = accept | state = idle) & address[0] = 1 : address[6]; 
+    --     (state = single | state = idle) & address[0] = 1 : address[6]; 
     --     TRUE : address[5];
     -- esac; 
 
@@ -150,12 +162,14 @@ ASSIGN
     --     TRUE : address[6];
     -- esac; 
 
+-- Ogni tag riceve come parametri sia il lettore (a simulazione del fatto che ogni tag è in comunicazione con il lettore)
+-- sia i bit che compongono il proprio id, essenziali per l. 
 MODULE Tag(reader, b0, b1, b2, b3, b4)
 
 VAR 
-state: {wait, transmitting, check_single, identified};
-address : array 0..4 of -1..1; -- created dinamically 
-present: 0..1; 
+    state   : {wait, transmitting, check_single, identified};
+    address : array 0..4 of -1..1; 
+    present : 0..1; -- impostato a 1 quando si presenta nel nodo corrente puntato dal lettore
 
 DEFINE 
 arrays_equal := (address[0]=reader.address[0] | reader.address[0]=-1) & (address[1]=reader.address[1] | reader.address[1]=-1)
@@ -169,22 +183,20 @@ ASSIGN
     init(address[2]) := b2;
     init(address[3]) := b3;
     init(address[4]) := b4;
-    -- init(address[5]) := b5;
-    -- init(address[6]) := b6;
 
     init(state) := wait;
     next(state) := 
     case
         reader.state = send & state = wait & arrays_equal : transmitting;
-        state = transmitting : check_single;
-        reader.state = accept & state = check_single : identified;
-        reader.state != accept & state = check_single : wait;
-        TRUE : state; 
+        state = transmitting                              : check_single;
+        reader.state = single & state = check_single      : identified;
+        reader.state != single & state = check_single     : wait;
+        TRUE                                              : state; 
     esac;
 
     init(present) := 0;
     next(present) := 
     case
         reader.state = send & state = wait & arrays_equal : 1; 
-        TRUE : 0;
+        TRUE                                              : 0;
     esac;   
