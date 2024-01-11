@@ -6,45 +6,70 @@
 MODULE main 
 
 VAR 
-    reader: Reader(tag1, tag2);
-    tag1: Tag(reader, 900, 10);
-    tag2: Tag(reader, 9010, 100);
-    --tag3: Tag(reader, 9011, 100);
-    --tag4: Tag(reader, 9100, 100);
-    --tag5: Tag(reader, 9101, 100);
-    --tag6: Tag(reader, 91110, 1000);
-    --tag7: Tag(reader, 911110, 10000);
-    --tag8: Tag(reader, 911111, 10000); 
+    reader: Reader(tag1, tag2, tag3);--, tag4, tag5, tag6, tag7, tag8);
+    tag1: Tag(reader, 0, 0, -1, -1, -1);
+    tag2: Tag(reader, 0, 1, 0, -1, -1);
+    --tag3: Tag(reader, 0, 0, 1, -1, -1);
+    -- tag4: Tag(reader, 1, 0, 0, -1, -1);
+    -- tag5: Tag(reader, 1, 0, 1, -1, -1);
+    -- tag6: Tag(reader, 1, 1, 1, 0, -1);
+    -- tag7: Tag(reader, 1, 1, 1, 1, 0);
+    tag3: Tag(reader, 1, 1, 1, 1, 1); 
 
 -- PROPERTY 
 
--- Correttezza anticollisione
--- si verifica se l'algoritmo di anticollisisone è funzionante o meno. 
--- una volta che si innesca una collisione viene verifcato che tutti i cammini
--- presenti portino comunque alla lettura di tutti i tag. 
---LTLSPEC 
---G (reader.state = collision -> F (reader.state = accept))
+-- prima o poi si raggiunge il termine dell'esecuzione e i tag saranno
+-- stati tutti individuati 
+CTLSPEC 
+EF(reader.state = end & reader.tag_count = 0)
 
--- Deadlock
--- si verifica che il sistema non vada in deadlock e quindi non 
--- rimanga bloccato in uno stato di collisione.  
---LTLSPEC 
---G (reader.state = collision)
+-- se solo un tag riceve la sonda allora il reader sarà in accettazione 
+-- nel prossimo turno
+CTLSPEC 
+AG((tag1.present + tag2.present + tag3.present --+ tag4.present + tag5.present + tag6.present + tag7.present + tag8.present 
+        = 1) -> EX(reader.state = accept))
 
+-- se si raggiunge il termine dell'esecuzione si ha che tutti i tag 
+-- sono stati identificati dal lettore
+CTLSPEC 
+AG((reader.state = end) -> (tag1.state = identified & tag2.state = identified & tag3.state = identified)) --& tag4.state = identified & tag5.state = identified
+                            --& tag6.state = identified & tag7.state = identified & tag8.state = identified))
 
-LTLSPEC 
-F (reader.state = end); 
+-- quando un tag viene identificato non compie più operazioni, 
+-- non cambiando più il suo stato 
+CTLSPEC
+EF(AG(tag1.state = identified & tag2.state = identified & tag3.state = identified)) --& tag4.state = identified & tag5.state = identified
+                            --& tag6.state = identified & tag7.state = identified & tag8.state = identified))
 
-MODULE Reader(tag1, tag2) 
+-- quando sono stati identificati tutti i tag il reader  non  
+-- compie più operazioni, non cambiando più il suo stato 
+CTLSPEC
+AG((reader.tag_count = 0) -> EX(EG(reader.state = end)))
+
+-- quando il reader ha smesso di lavorare tutti i tag sono stati 
+-- identificati 
+CTLSPEC
+AG((reader.state = end) -> (tag1.state = identified & tag2.state = identified & tag3.state = identified)) --& tag4.state = identified & tag5.state = identified
+                            --& tag6.state = identified & tag7.state = identified & tag8.state = identified))
+
+-- dopo che un tag è entrato in trasmissione prima o poi sarà identificato
+-- verifica su tag 1 
+CTLSPEC 
+AG((tag1.state = transmitting) -> EF(tag1.state = identified))
+
+-- verifica su ultimo tag
+CTLSPEC 
+AG((tag3.state = transmitting) -> EF(tag3.state = identified))
+
+MODULE Reader(tag1, tag2, tag3)--, tag4, tag5, tag6, tag7, tag8) 
 
 VAR 
 state : {send, wait, idle, collision, accept, end};
-tag_count : 0..8; -- counter of unknow tag 
-address : array 0..6 of -1..1; -- Assuming max lenght address
+tag_count : 0..3; -- counter of unknow tag 
+address : array 0..4 of -1..1; -- Assuming max lenght address
 
 DEFINE
-    node_count := tag1.present + tag2.present;
-    N := 6;
+    node_count := tag1.present + tag2.present + tag3.present;-- + tag4.present + tag5.present + tag6.present + tag7.present + tag8.present;
 
 ASSIGN
 
@@ -62,7 +87,7 @@ ASSIGN
         TRUE : state; 
     esac;
 
-    init(tag_count) := 2;
+    init(tag_count) := 3;
     next(tag_count) := 
     case
         state = accept & tag_count > 0 : tag_count - 1;
@@ -106,42 +131,48 @@ ASSIGN
     next(address[4]) := 
     case 
         state = collision & address[0] != -1 : address[3];
-        (state = accept | state = idle) & address[0] = 1 : address[5]; 
+        --(state = accept | state = idle) & address[0] = 1 : address[5]; 
         TRUE : address[4];
     esac; 
 
-    init(address[5]) := -1;
-    next(address[5]) := 
-    case 
-        state = collision & address[0] != -1 : address[4];
-        (state = accept | state = idle) & address[0] = 1 : address[6]; 
-        TRUE : address[5];
-    esac; 
+    -- init(address[5]) := -1;
+    -- next(address[5]) := 
+    -- case 
+    --     state = collision & address[0] != -1 : address[4];
+    --     (state = accept | state = idle) & address[0] = 1 : address[6]; 
+    --     TRUE : address[5];
+    -- esac; 
 
-    init(address[6]) := -1;
-    next(address[6]) := 
-    case 
-        state = collision & address[0] != -1 : address[5];
-        TRUE : address[6];
-    esac; 
+    -- init(address[6]) := -1;
+    -- next(address[6]) := 
+    -- case 
+    --     state = collision & address[0] != -1 : address[5];
+    --     TRUE : address[6];
+    -- esac; 
 
-MODULE Tag(reader, id, ind10)
+MODULE Tag(reader, b0, b1, b2, b3, b4)
 
 VAR 
 state: {wait, transmitting, check_single, identified};
-address : array 0..6 of -1..1; -- created dinamically 
+address : array 0..4 of -1..1; -- created dinamically 
 present: 0..1; 
-i10: 1..1000000; 
 
 DEFINE 
-N := 6;
-new_bit := ((id / i10) mod 2); 
-arrays_equal := address[0]=reader.address[0] & address[1]=reader.address[1] & address[2]=reader.address[2] 
-    & address[3]=reader.address[3] & address[4]=reader.address[4] & address[5]=reader.address[5] & address[6]=reader.address[6];
+arrays_equal := (address[0]=reader.address[0] | reader.address[0]=-1) & (address[1]=reader.address[1] | reader.address[1]=-1)
+              & (address[2]=reader.address[2] | reader.address[2]=-1) & (address[3]=reader.address[3] | reader.address[3]=-1) 
+              & (address[4]=reader.address[4] | reader.address[4]=-1); --& (address[5]=reader.address[5] | reader.address[5]=-1) & (address[6]=reader.address[6] | reader.address[6]=-1);
 
 ASSIGN
-init(state) := wait;
-    
+
+    init(address[0]) := b0;
+    init(address[1]) := b1;
+    init(address[2]) := b2;
+    init(address[3]) := b3;
+    init(address[4]) := b4;
+    -- init(address[5]) := b5;
+    -- init(address[6]) := b6;
+
+    init(state) := wait;
     next(state) := 
     case
         reader.state = send & state = wait & arrays_equal : transmitting;
@@ -151,66 +182,9 @@ init(state) := wait;
         TRUE : state; 
     esac;
 
-    init(i10) := ind10; -- Special i, multiple 10, that find a correct bit in "id"
-    next(i10) := 
-    case
-        i10 > 1 & reader.state = collision : i10 / 10;  
-        TRUE : i10;
-    esac;   
-
     init(present) := 0;
     next(present) := 
     case
         reader.state = send & state = wait & arrays_equal : 1; 
-        reader.state != send : 0; 
-        TRUE : present;
+        TRUE : 0;
     esac;   
-
-    init(address[0]) := -1; 
-    next(address[0]) := 
-    case 
-        reader.state = collision : new_bit; 
-        TRUE : address[0];
-    esac; 
-
-    init(address[1]) := -1; 
-    next(address[1]) := 
-    case 
-        reader.state = collision & address[0] != -1 : address[0]; 
-        TRUE : address[1];
-    esac; 
-
-    init(address[2]) := -1; 
-    next(address[2]) := 
-    case 
-        reader.state = collision & address[0] != -1 : address[1]; 
-        TRUE : address[2];
-    esac; 
-
-    init(address[3]) := -1; 
-    next(address[3]) := 
-    case 
-        reader.state = collision & address[0] != -1 : address[2]; 
-        TRUE : address[3];
-    esac; 
-
-    init(address[4]) := -1; 
-    next(address[4]) := 
-    case 
-        reader.state = collision & address[0] != -1 : address[3]; 
-        TRUE : address[4];
-    esac; 
-
-    init(address[5]) := -1; 
-    next(address[5]) := 
-    case 
-        reader.state = collision & address[0] != -1 : address[4]; 
-        TRUE : address[5];
-    esac; 
-
-    init(address[6]) := -1; 
-    next(address[6]) := 
-    case 
-        reader.state = collision & address[0] != -1 : address[5]; 
-        TRUE : address[6];
-    esac; 
