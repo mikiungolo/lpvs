@@ -11,14 +11,21 @@
 -- Un tag sarà individuato se e solo se sarà l'unico ad aver ricevuto la sonda da parte del lettore, 
 -- ovvero quando il suo id è uguale a quello presente nella sonda.  
 
+-- Nel sistema Rfid simulato i tag sono attivi, disponendo quindi di una propria alimentazione. 
+-- Ogni tag ha una determinata energia casuale che una volta esaurita dopo svariate trasmissioni 
+-- spegneranno automaticamente il tag rendendolo ininfluente all'interno del sistema.
+-- Si osserva il caso estremo: quando un tag viene individuato con "l'ultimo livello di energia"
+-- essa terminerà ma all'interno del sistema si è scelto comunque di ritenerlo identified e non spento 
+-- per scelta logica. In ogni caso la seguente situazione non condiziona l'esecuzione del sistema. 
+
 MODULE main 
 
 VAR 
-    reader: Reader(tag1, tag2, tag3, tag4);--, tag5, tag6, tag7, tag8);
+    reader: Reader(tag1, tag2, tag3);--, tag4, tag5, tag6, tag7, tag8);
     tag1:   Tag(reader, 0, 0, -1, -1, -1);
     tag2:   Tag(reader, 0, 1, 0, -1, -1);
     tag3:   Tag(reader, 1, 1, 1, 1, 1); 
-    tag4:   Tag(reader, 0, 0, 1, -1, -1);
+    -- tag4:   Tag(reader, 0, 0, 1, -1, -1);
     -- tag5: Tag(reader, 1, 0, 0, -1, -1);
     -- tag6: Tag(reader, 1, 0, 1, -1, -1);
     -- tag7: Tag(reader, 1, 1, 1, 0, -1);
@@ -31,11 +38,17 @@ VAR
 -- dopo che un tag è entrato in trasmissione prima o poi sarà identificato
 -- verifica su tag 1 
 CTLSPEC 
-    EF((tag1.state = transmitting) -> (tag1.state = identified))
+    EF((tag1.state = transmitting) -> (tag1.state = identified | tag1.state = shutdown))
 
--- verifica su ultimo tag
+-- verifica su tutti i tag
 CTLSPEC 
-    EF((tag3.state = transmitting) -> (tag3.state = identified))
+    EF((tag2.state = transmitting) -> (tag2.state = identified | tag2.state = shutdown))
+
+CTLSPEC 
+    EF((tag3.state = transmitting) -> (tag3.state = identified | tag3.state = shutdown))
+
+-- CTLSPEC 
+--     EF((tag4.state = transmitting) -> (tag4.state = identified | tag4.state = shutdown))
 
 -- prima o poi si raggiunge il termine dell'esecuzione e i tag saranno
 -- stati tutti individuati 
@@ -44,11 +57,12 @@ CTLSPEC
 
 -- LIVENESS 
 
--- se tutti i tag sono stati individuati lungo il cammino allora 
--- l'algoritmo termina e tale condizione non varierà in nessun modo. 
+-- se tutti i tag sono stati individuati o sono rimasti senza alimentazione lungo il cammino  
+-- allora l'algoritmo termina e tale condizione non varierà in nessun modo. 
 CTLSPEC 
-    AG((tag1.state = identified & tag2.state = identified & tag3.state = identified & tag4.state = identified -- & tag5.state = identified
-                            --& tag6.state = identified & tag7.state = identified & tag8.state = identified
+    AG(((tag1.state = identified | tag1.state = shutdown) & (tag2.state = identified | tag1.state = shutdown) & 
+        (tag3.state = identified | tag3.state = shutdown) -- & (tag4.state = identified | tag4.state = shutdown) & (tag5.state = identified | tag5.state = shutdown) &
+     -- (tag6.state = identified | tag6.state = shutdown) & (tag7.state = identified | tag1.state = shutdown) & (tag8.state = identified | tag1.state = shutdown)
                             -> AF((reader.state = end))))
 
 -- LIVENESS (condizionata al turno successivo X)
@@ -59,10 +73,10 @@ CTLSPEC
     AG((reader.tag_count = 0) -> AX(reader.state = end))
 
 -- se solo un tag riceve la sonda allora il reader sarà in accettazione 
--- nel prossimo turno
+-- nel prossimo turno a meno che esso non sia l'ultimo e allora termina
 CTLSPEC 
-    AG((tag1.present + tag2.present + tag3.present + tag4.present --+ tag5.present + tag6.present + tag7.present + tag8.present 
-            = 1) -> AX(reader.state = single))
+    AG((tag1.present + tag2.present + tag3.present -- + tag4.present + tag5.present + tag6.present + tag7.present + tag8.present 
+            = 1) -> AX(reader.state = single | reader.state = end))
 
 -- FAIRNESS DEBOLE 
 -- se un tag in un dato punto è in stato di trasmissione allora 
@@ -70,18 +84,29 @@ CTLSPEC
 LTLSPEC
     F(G tag1.state = transmitting) -> G(F reader.state = send)
 
+-- FAIRNESS FORTE
+-- qualora un tag dovesse spegnersi per aver terminato la sua batteria allora non 
+-- non si troverà mai presente in un futuro nodo in cui il lettore va a ricercare i tag 
+-- mancanti nel sistema; quindi non potrà più comunicare con il reader. 
+-- Viene verificato attraverso la variabile presente perchè attraverso lo stato del tag 
+-- (GF (!tag1.transmitting) ad esempio), tale proprietà risultava banale da verificare. 
+LTLSPEC
+    G F(tag1.state = shutdown) -> G F(tag1.present = 0)
+
 -- Nel seguente livello d'astrazione il Reader conosce il numero di tag presenti nel suo raggio d'azione.
 -- Tale conoscenza verrà sfruttata per la verifica delle collisioni e per tenere il conto dei tag non identificati.  
-MODULE Reader(tag1, tag2, tag3, tag4)--, tag5, tag6, tag7, tag8) 
+
+MODULE Reader(tag1, tag2, tag3)--, tag4 tag5, tag6, tag7, tag8) 
 
 VAR 
     state     : {send, wait, idle, collision, single, end}; -- stato dele reader 
-    tag_count : 0..4; -- contatore tag 
+    tag_count : 0..3; -- contatore tag 
     address   : array 0..4 of -1..1; -- indirizzo dinamico che simula il contenuto di una sonda
 
 DEFINE
     -- conta il numero di tag presenti in un nodo dell'albero
-    node_count := tag1.present + tag2.present + tag3.present + tag4.present; -- + tag5.present + tag6.present + tag7.present + tag8.present;
+    node_count := tag1.present + tag2.present + tag3.present;-- + tag4.present + tag5.present + tag6.present + tag7.present + tag8.present;
+    off_count  := tag1.off + tag2.off + tag3.off; -- + tag4.off + tag5.off + tag6.off + tag7.off + tag8.off;
 
 ASSIGN
 
@@ -99,11 +124,12 @@ ASSIGN
         TRUE                          : state; 
     esac;
 
-    init(tag_count) := 4;
+    init(tag_count) := 3;
     next(tag_count) := 
     case
-        state = single & tag_count > 0 : tag_count - 1;
-        TRUE                           : tag_count;   
+        state = single & tag_count > 0        : tag_count - 1;
+        tag_count > 0 & tag_count >= off_count : tag_count - off_count;   
+        TRUE                                  : tag_count;
     esac;    
 
     init(address[0]) := -1;
@@ -163,14 +189,18 @@ ASSIGN
     -- esac; 
 
 -- Ogni tag riceve come parametri sia il lettore (a simulazione del fatto che ogni tag è in comunicazione con il lettore)
--- sia i bit che compongono il proprio id, essenziali per l. 
+-- sia i bit che compongono il proprio id, per simulare il comportamento probabilistico che associa bit al proprio indirizzo. 
 MODULE Tag(reader, b0, b1, b2, b3, b4)
 
 VAR 
-    state   : {wait, transmitting, check_single, identified};
-    address : array 0..4 of -1..1; 
-    present : 0..1; -- impostato a 1 quando si presenta nel nodo corrente puntato dal lettore
+    state       : {wait, transmitting, check_single, identified, shutdown};
+    address     : array 0..4 of -1..1; 
+    present     : 0..1; -- impostato a 1 quando si presenta nel nodo corrente puntato dal lettore
+    lev_battery : -1..3; 
+    off         : 0..1; -- impostato a 1 quando è senza alimentazione
 
+-- ogni tag confronta bit per bit l'indirizzo con l'indirizzo della sonda inviata senza considerare però i bit = -1. 
+-- questa scelta sta a simulare un cammino simultaneo nell'albero delle collisioni come mostrato nel documento. 
 DEFINE 
 arrays_equal := (address[0]=reader.address[0] | reader.address[0]=-1) & (address[1]=reader.address[1] | reader.address[1]=-1)
               & (address[2]=reader.address[2] | reader.address[2]=-1) & (address[3]=reader.address[3] | reader.address[3]=-1) 
@@ -187,11 +217,12 @@ ASSIGN
     init(state) := wait;
     next(state) := 
     case
-        reader.state = send & state = wait & arrays_equal : transmitting;
-        state = transmitting                              : check_single;
-        reader.state = single & state = check_single      : identified;
-        reader.state != single & state = check_single     : wait;
-        TRUE                                              : state; 
+        lev_battery > 0 & reader.state = send & state = wait & arrays_equal : transmitting;
+        state = transmitting                                                : check_single;
+        reader.state = single & state = check_single                        : identified;
+        lev_battery > 0 & reader.state != single & state = check_single     : wait;
+        lev_battery = 0 & state != identified                               : shutdown;
+        TRUE                                                                : state; 
     esac;
 
     init(present) := 0;
@@ -200,3 +231,22 @@ ASSIGN
         reader.state = send & state = wait & arrays_equal : 1; 
         TRUE                                              : 0;
     esac;   
+
+-- nel momento in cui la batteria di un tag termina esso diventa inattivo all'interno di un sistema  
+-- se la batteria si esaurisce nel momento in cui esso è in solitaria in un nodo il tag viene comunque individuato 
+-- se la batteria si esaurisce dopo aver trasmesso in contemporanea ad un altro tag, quest'ultimo non verrà considerato single
+    init(lev_battery) := {1, 3}; 
+    next(lev_battery) := 
+    case 
+        lev_battery > 0 & state = transmitting : lev_battery -1; 
+        lev_battery = 0                        : -1;
+        TRUE                                   : lev_battery; 
+    esac; 
+
+    init(off) := 0; 
+    next(off) := 
+    case
+        off = 1 : 0;
+        lev_battery = -1 & state != identified       : 1; 
+        TRUE                                         : 0;
+    esac; 
