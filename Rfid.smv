@@ -25,17 +25,17 @@ VAR
     tag1:   Tag(reader, -1, -1, -1, 0, 0);
     tag2:   Tag(reader, -1, -1, 0, 1, 0); 
     tag3:   Tag(reader, -1, -1, 1, 1, 0);
-    tag4: Tag(reader, -1, -1, 0, 0, 1);
-    tag5: Tag(reader, -1, -1, 1, 0, 1);
-    tag6: Tag(reader, -1, 0, 1, 1, 1);
-    tag7: Tag(reader, 0, 1, 1, 1, 1);
+    tag4:   Tag(reader, -1, -1, 0, 0, 1);
+    tag5:   Tag(reader, -1, -1, 1, 0, 1);
+    tag6:   Tag(reader, -1, 0, 1, 1, 1);
+    tag7:   Tag(reader, 0, 1, 1, 1, 1);
     tag8:   Tag(reader, 1, 1, 1, 1, 1);
 
 -- PROPERTY 
 
 -- RAGGIUNGIBILITA'
 
--- si verifica semche effettivamente l'algoritmo è in grado di individuare tutti i tag nel proprio 
+-- si verifica se effettivamente l'algoritmo è in grado di individuare tutti i tag nel proprio 
 -- raggio d'azione
 CTLSPEC
     AF(reader.tag_count = 0 & reader.state = end)
