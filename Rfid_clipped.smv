@@ -1,3 +1,8 @@
+-- In questa versione Rfid_clipped si punta ad analizzare e confrontare l'algoritmo clipped con l'algoritmo base 
+-- di anticollisione senza che il fattore alimentazione dei tag influenzi il flusso d'esecuzione dell'algoritmo stesso.
+-- Al termine del codice viene mostrata una traccia di esecuzione in cui i tag attivi sono influenti 
+-- durante l'esecuzione. Si imposta il lev_battery del modulo Tag a {2, 3} per verificare questo
+
 -- Questa applicazione modella un sistema Rfid, in particolare 
 -- modella e verifica l'algoritmo base di anticollisione per i lettori.
 -- il sistema è rappresentato da un lettore ed un numero N di tag disponibili
@@ -104,6 +109,7 @@ CTLSPEC
 LTLSPEC
     G F(tag1.state = shutdown) -> G F(tag1.present = 0)
 
+-- VERIFICA DEL MIGLIORAMENTO BASATO SUL NUMERO DI COLLISIONI CHE SI OTTENGONO
 -- Attraverso il modello base dell'algoritmo di anticollisione si è dimostrato che in un ambiente 
 -- in cui il livello della batteria non influenza il cammino naturale che ogni tag deve compiere, 
 -- il numero di collisioni in un sistema inizializzato come nell'esempio del documento è 8.
@@ -317,7 +323,8 @@ ASSIGN
         TRUE                                   : 0;
     esac; 
 
--- Di seguito vengono mostrate le transizioni degli stati in una possibile esecuzione da parte del tool.
+-- Di seguito vengono mostrate le transizioni degli stati in una possibile esecuzione da parte del tool
+-- in una condizione in cui i tag attivi influenzano l'esecuzione tramite il lev_battery {2, 3}.
 -- Si va a negare lo stato finale del reader "end" che indica la fine deel'algoritmo. 
 
 -- NuSMV > check_ctlspec -p "AG !(reader.state = end)" 
